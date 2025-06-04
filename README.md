@@ -1,49 +1,51 @@
-# Project3
-
 # Gorgon’s Gambit: A Greek 3CG
 
 ## Programming Patterns Used
 
-**Constructor Pattern**  
-- **Where:** `Player:new(…)`, `Location:new(…)`, `Card:new(…)`, `Deck:new(…)`, `UI:new(…)`.  
-- **How & Why:** Each major object (players, cards, locations, decks, UI manager) is instantiated via a `:new(...)` function that initializes its fields and methods. This eliminates duplicate setup code (e.g. setting a player’s starting hand or a location’s battle state) and ensures every instance is created with the same baseline logic.
+-- **Constructor Pattern**  
+   I use `:new(…)` functions for each major object (`Player:new`, `Location:new`, `Card:new`, `Deck:new`, `UI:new`). That way, whenever I need a fresh player, card, location, deck, or UI manager, I just call its constructor instead of repeating setup code. It keeps initialization consistent.
 
-**Singleton Pattern**  
-- **Where:** The global `GameManager` and the single `EventQueue` module.  
-- **How & Why:**  
-  - **GameManager** is assigned as a true global (not `local`) so that any module (e.g. `Location.lua`) can refer directly to the same game‐state manager. This ensures there’s exactly one master controller of turns, reveals, scoring, and win/lose logic.  
-  - **EventQueue** is a single shared queue of timed callbacks (for card‐reveal animations and ability triggers). Having a single instance avoids passing it around; any module can push or consume events from the same queue.
+-- **Singleton Pattern**  
+   - **GameManager** is a true global (not a `local`), so everyone (especially `Location.lua`) can refer to the same instance of the game state. That means there’s always exactly one controller of turns, reveals, scoring, and win/lose logic.  
+   - **EventQueue** is a single shared queue for timed callbacks (card flips, “When Revealed” abilities). By having just one `EventQueue:new()` created in `main.lua`, any module can push or consume events without passing it around everywhere.
 
-**Observer Pattern**  
-- **Where:** Each `Player` has an `observer` field (an `Observer` instance), and `UI.lua` subscribes to those `observer` events.  
-- **How & Why:** Whenever a player’s hand changes, their mana changes, or their point total changes, the player calls `self.observer:notify("handChanged", hand)` or `:notify("manaChanged", mana)` or `:notify("pointsChanged", points)`. The UI code listens for those events to redraw the on‐screen hand, update the mana text, or update the scoreboard. This decouples the game logic (changing the hand array or deducting mana) from the rendering logic that updates the screen.
+-- **Observer Pattern**  
+   Each `Player` has an `observer` object, and `UI.lua` subscribes to those observer events. Whenever the player’s hand changes (draw, play), mana changes (start of turn or cost deducted), or points change (after scoring), the player does `self.observer:notify("handChanged", hand)` or `:notify("manaChanged", mana)` or `:notify("pointsChanged", points)`. The UI listens and redraws the hand, updates the mana text, or updates the score. This decouples game logic from rendering code.
 
-**Iterator Pattern**  
-- **Where:** Loops like `for i, c in ipairs(self.hand) do … end`, `for _, loc in ipairs(self.locations) do … end`, `for _, entry in ipairs(self.staged) do … end`.  
-- **How & Why:** Anytime the code needs to traverse all items in a list—draw every card in the player’s hand, stage every card in a location, compute total power at each battlefield—the `ipairs` iterator is used. It makes those loops concise and readable, avoiding manual index bookkeeping.
+-- **Iterator Pattern**  
+   Whenever I need to loop through a list—like “for i, c in ipairs(self.hand) do …” or “for _, loc in ipairs(self.locations) do …” or “for _, entry in ipairs(self.staged) do …”—I use the built‐in `ipairs` iterator. It makes loops concise.
 
 ---
 
 ## Postmortem
 
 **What I Did Well**  
-- **Clear Separation of Concerns:** I divided the code into well‐defined modules—`Card` for rendering and attributes, `Deck` for shuffle/draw, `Location` for staging and reveals, `Player` for hand/mana/drag‐drop, `AI` inheriting from `Player`, `GameManager` for the overall turn loop, `UI` for on‐screen buttons and overlays, and `EventQueue` for timed animations. This modularity allowed me to debug and test each piece independently.  
-- **Immediate Staging on Drag & Drop:** As soon as the human player drops a card into a location, `Player:tryPlayCard` removes it from the hand, deducts mana, and stages it face‐down. This “instant feedback” makes the game feel responsive—cards don’t flicker back into the hand just because Submit hasn’t been clicked yet.  
-- **Complete Greek “When Revealed” Abilities:** I implemented ten unique Greek mythology cards (Zeus, Ares, Medusa, Cyclops, Poseidon, Artemis, Hera, Demeter, Hades, Hercules), each with a distinct ability that triggers when flipped. They all behave exactly as described in `CardData.lua`, fulfilling the requirement for at least ten custom cards.
+-- I broke the code into clear modules—`Card` handles drawing each card and its attributes, `Deck` handles shuffle/draw, `Location` handles staging and reveal logic, `Player` handles hand/mana/drag‐drop, `AI` inherits from `Player` and stages cards randomly, `GameManager` orchestrates turn flow, `UI` draws buttons and overlays, and `EventQueue` runs timed animations. This separation made debugging each piece much easier.
+
+-- Right after you drag a card from your hand into a location, `Player:tryPlayCard` immediately removes it from the hand, deducts mana, and stages it face down. That instant feedback makes the game feel responsive, cards don’t flicker back into the hand just because you haven’t clicked Submit yet.
+
+-- I implemented ten distinct Greek‐mythology “When Revealed” cards (Zeus, Ares, Medusa, Cyclops, Poseidon, Artemis, Hera, Demeter, Hades, Hercules). Each ability triggers exactly as described in `CardData.lua`, so we meet the requirement for at least ten custom cards.
 
 **What I’d Do Differently**  
-- **Refine Reveal Animation Management:** Currently, `Location:revealAll` pushes reveal events into a single `EventQueue` with a fixed 0.5‐second increment. In future iterations, I might create a dedicated `RevealManager` (or use a State pattern) to better orchestrate multi‐location reveal timing, especially if more than three locations or conditional reveals are added.  
-- **Data‐Driven Layout:** Right now, card front layouts (where name, cost, power, and text appear) are hard‐coded with fixed y‐offsets. I would consider moving those offsets into a JSON or Lua configuration passed into `Card:draw`, so I can tweak font sizes, line breaks, and spacing without touching the drawing code.  
-- **Introduce a Factory for Cards:** Instead of a big `makeAbility()` switch in `Deck.lua`, I could apply a Factory pattern that returns a specialized card subclass (e.g. `ZeusCard`) whose `onReveal()` method is defined inline. That would encapsulate each ability directly in its own class, making it easier to add or modify abilities later.
+-- Right now `Location:revealAll` pushes all flips into a single `EventQueue` with fixed 0.5 second gaps. In the future, I’d build a small `RevealManager` or use a State pattern to better orchestrate reveals, especially if we add more than three locations or conditional reveal orders.
+
+-- Card face layouts (name at top, cost/power text in the middle) are hard‐coded with fixed y‐offsets in `Card:draw`. I’d move those offsets into a data file (Lua table or JSON) so I could tweak font sizes, line wraps, and spacing without touching the code.
+
+-- Instead of a big `makeAbility()` switch inside `Deck.lua`, I could use a Factory pattern to return specialized card subclasses (e.g., `ZeusCard` with an `onReveal()` method). That would keep each ability in its own class and avoid a huge conditional block.
 
 ---
 
 ## Assets Used
 
-- **Sprites / Images:** None. All card faces, battlefield slots, and buttons are drawn procedurally via Love2D’s `love.graphics.rectangle` and `love.graphics.printf`.  
-- **Fonts:** Default Love2D font. No external `.ttf` files were used.  
-- **Sound Effects & Music:** None in this version. (Planned for a future update.)  
-- **Shaders:** None.  
+-- **Sprites / Images:** None—everything (card backs, battlefield slots, buttons) is drawn procedurally with `love.graphics.rectangle` and `love.graphics.printf`.
+
+-- **Fonts:** Default Love2D font (no external `.ttf`).
+
+-- **Sound Effects & Music:** None in this version (planned for a future update).
+
+-- **Shaders:** None.
+
+
 
 
 
